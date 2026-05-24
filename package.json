@@ -1,0 +1,60 @@
+{
+  "name": "@shapeshift-labs/frontier-state",
+  "version": "0.1.0",
+  "description": "Patch-routed app-state subscriptions and maintained views for Frontier.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/siliconjungle/-shapeshift-labs-frontier.git",
+    "directory": "packages/frontier-state"
+  },
+  "homepage": "https://github.com/siliconjungle/-shapeshift-labs-frontier#readme",
+  "bugs": {
+    "url": "https://github.com/siliconjungle/-shapeshift-labs-frontier/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./state": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./path-map": {
+      "types": "./dist/path-map.d.ts",
+      "import": "./dist/path-map.js",
+      "default": "./dist/path-map.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@shapeshift-labs/frontier": "^0.1.2"
+  },
+  "scripts": {
+    "build": "npm --prefix ../.. run build && node build.mjs",
+    "test": "npm run build && node test/smoke.mjs",
+    "prepack": "npm run test"
+  },
+  "keywords": [
+    "frontier",
+    "state",
+    "subscriptions",
+    "json",
+    "patch"
+  ]
+}
