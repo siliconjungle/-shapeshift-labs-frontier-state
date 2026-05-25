@@ -1,3 +1,17 @@
+import type {
+  DiffOptions,
+  DiffProfile,
+  EngineOptions,
+  TrainingSample
+} from '@shapeshift-labs/frontier-engine/types';
+
+export type {
+  DiffOptions,
+  DiffProfile,
+  EngineOptions,
+  TrainingSample
+};
+
 /** JSON primitive values supported by Frontier state patches. */
 export type JsonPrimitive = null | boolean | number | string;
 
@@ -53,123 +67,6 @@ export interface DirtyRowsFrontier {
   rows: ArrayLike<number>;
   fields?: JsonPath[];
 }
-
-export interface DiffOptions<TValue extends JsonValue = JsonValue> {
-  validate?: boolean;
-  strategy?: 'replace';
-  maxPatchOperations?: number | null;
-  stable?: boolean | KeyCompare;
-  sortKeys?: boolean;
-  keyCompare?: KeyCompare;
-  versionKey?: ObjectKey;
-  fingerprintKey?: ObjectKey;
-  getVersion?: TokenGetter<TValue>;
-  getFingerprint?: TokenGetter<TValue>;
-  arrayKey?: ObjectKey | ArrayKeyGetter<TValue> | boolean | null;
-  autoArrayKey?: boolean;
-  recordKeyCandidates?: ObjectKey[] | false | null;
-  containerKeys?: ObjectKey[] | false | null;
-  dirtyPaths?: JsonPath[];
-  dirtyRows?: DirtyRowsFrontier | DirtyRowsFrontier[];
-}
-
-export type SchemaField = ObjectKey | NestedObjectSchemaField;
-
-export interface NestedObjectSchemaField {
-  key: ObjectKey;
-  type: 'object';
-  fields: SchemaField[];
-}
-
-export interface ObjectSchema {
-  type: 'object';
-  path?: JsonPath;
-  fields: SchemaField[];
-}
-
-export interface RecordArraySchema {
-  type: 'array';
-  path?: JsonPath;
-  key?: ObjectKey;
-  item: {
-    type: 'object';
-    key?: ObjectKey;
-    fields: SchemaField[];
-  };
-}
-
-export type SingleSchema = ObjectSchema | RecordArraySchema;
-
-export interface MultiSchema {
-  schemas: SingleSchema[];
-}
-
-export type Schema = SingleSchema | MultiSchema;
-
-export interface DiffProfilePlan {
-  strategy?: 'structural' | 'schema' | 'adaptive-schema';
-  schemaCount?: number;
-  paths?: JsonPath[];
-}
-
-export interface EqualityProfilePlan {
-  strategy?: 'structural' | 'schema' | 'fingerprint' | 'version';
-  schemaCount?: number;
-}
-
-export interface StateProfilePlan {
-  routing?: 'patch-router';
-  apply?: 'owned-mutable';
-  watches?: number;
-  exactWatches?: number;
-  wildcardWatches?: number;
-  fieldWatches?: number;
-  rangeWatches?: number;
-}
-
-export interface ProfilePlans {
-  diff?: DiffProfilePlan;
-  equality?: EqualityProfilePlan;
-  state?: StateProfilePlan;
-}
-
-export interface EngineProfileSettings {
-  cacheSize?: number;
-  adaptive?: boolean;
-  adaptiveThreshold?: number;
-  arrayKey?: ObjectKey | false | null;
-  autoArrayKey?: boolean;
-  recordKeyCandidates?: ObjectKey[] | false | null;
-  containerKeys?: ObjectKey[] | false | null;
-  stable?: boolean;
-  sortKeys?: boolean;
-  maxPatchOperations?: number | null;
-  versionKey?: ObjectKey;
-  fingerprintKey?: ObjectKey;
-}
-
-export interface DiffProfile {
-  version?: 1;
-  settings?: EngineProfileSettings;
-  plans?: ProfilePlans;
-  schema?: SingleSchema;
-  schemas?: SingleSchema[];
-}
-
-export interface EngineOptions<TValue extends JsonValue = JsonValue> extends DiffOptions<TValue> {
-  cacheSize?: number;
-  maxEntries?: number;
-  adaptive?: boolean;
-  adaptiveThreshold?: number;
-  schema?: Schema | null;
-  containerKeys?: ObjectKey[] | false | null;
-  profile?: DiffProfile | null;
-}
-
-export type TrainingSample<TSource extends JsonValue = JsonValue, TTarget extends JsonValue = JsonValue> =
-  | [TSource, TTarget]
-  | { source: TSource; target: TTarget }
-  | { before: TSource; after: TTarget };
 
 export type WatchPath = string | JsonPath;
 export type PatchWatchCallback = (patch: Patch) => void;
