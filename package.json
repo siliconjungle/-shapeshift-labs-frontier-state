@@ -1,7 +1,7 @@
 {
   "name": "@shapeshift-labs/frontier-state",
-  "version": "0.0.2",
-  "description": "Reserved package name for the future Frontier state engine and subscription helpers.",
+  "version": "0.1.0",
+  "description": "Patch-routed app-state subscriptions and maintained views for Frontier.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -13,32 +13,56 @@
   "bugs": {
     "url": "https://github.com/siliconjungle/-shapeshift-labs-frontier-state/issues"
   },
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./state": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./path-map": {
+      "types": "./dist/path-map.d.ts",
+      "import": "./dist/path-map.js",
+      "default": "./dist/path-map.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "index.js",
-    "index.d.ts",
+    "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "benchmarks/package-bench.mjs"
   ],
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "@shapeshift-labs/frontier": "^0.1.5",
+    "@shapeshift-labs/frontier-engine": "^0.1.0"
+  },
   "scripts": {
-    "test": "node -e \"import('./index.js').catch((error) => { if (!String(error && error.message).includes('reserved placeholder')) process.exit(1); })\""
+    "build": "node build.mjs",
+    "test": "npm run build && npm run typecheck && node test/smoke.mjs && node test/fuzz.mjs --cases 300",
+    "prepack": "npm run test",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "fuzz": "npm run build && node test/fuzz.mjs",
+    "bench": "npm run build && node benchmarks/package-bench.mjs",
+    "pack:dry": "npm pack --dry-run"
   },
   "keywords": [
     "frontier",
     "state",
     "subscriptions",
-    "reserved"
-  ]
+    "json",
+    "patch"
+  ],
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }
