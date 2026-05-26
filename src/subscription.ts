@@ -278,6 +278,9 @@ export function createPatchRouter(): PatchRouter {
       const op = patch[0];
       if (singletonRouteKind === 1) {
         const singletonCount = routeSingletonExact(singletonExactEntry as WatchEntry, singletonExactPath as JsonPath, op, patch);
+        if (singletonCount === 1 && (singletonExactEntry as WatchEntry).active) {
+          (singletonExactEntry as WatchEntry).callback(patch);
+        }
         if (singletonCount !== -1) return singletonCount;
       } else if (singletonRouteKind === 2) {
         const singletonRowFieldCount = routeSingletonRowField(
@@ -288,6 +291,9 @@ export function createPatchRouter(): PatchRouter {
           op,
           patch
         );
+        if (singletonRowFieldCount === 1 && (singletonRowFieldEntry as WatchEntry).active) {
+          (singletonRowFieldEntry as WatchEntry).callback(patch);
+        }
         if (singletonRowFieldCount !== -1) return singletonRowFieldCount;
       }
       const cachedCount = dispatchCachedOperationRoute(indexes, op, patch);
@@ -1807,13 +1813,11 @@ function routeSingletonExact(entry: WatchEntry, watchPath: JsonPath, op: PatchOp
                 watchPath[3] === opPath[3]
               : isPathPrefix(watchPath, opPath)
           ) {
-            entry.callback(patch);
             return 1;
           }
           return 0;
         }
         if (pathOverlaps(watchPath, opPath)) {
-          entry.callback(patch);
           return 1;
         }
       }
@@ -1824,14 +1828,12 @@ function routeSingletonExact(entry: WatchEntry, watchPath: JsonPath, op: PatchOp
     case OP_ARRAY_TWO_FIELD_INSERT:
     case OP_ARRAY_MOVE:
       if (pathOverlaps(watchPath, op[1])) {
-        entry.callback(patch);
         return 1;
       }
       return 0;
     case OP_STRING_SPLICE:
     case OP_STRING_COPY:
       if (isPathPrefix(watchPath, op[1])) {
-        entry.callback(patch);
         return 1;
       }
       return 0;
@@ -1856,7 +1858,6 @@ function routeSingletonRowField(
   const field = fields[0];
   if (field.length !== 2) return -1;
   if (field[0] === field0 && field[1] === field1) {
-    entry.callback(patch);
     return 1;
   }
   return 0;
