@@ -1,0 +1,30 @@
+{
+  "package": "@shapeshift-labs/frontier-state",
+  "version": "0.1.0",
+  "generatedAt": "2026-05-26T05:52:22.423Z",
+  "node": "v26.1.0",
+  "platform": "darwin arm64",
+  "rounds": 9,
+  "rows": [
+    {
+      "fixture": "Patch router exact path dispatch",
+      "medianUs": 0.04,
+      "p95Us": 0.04
+    },
+    {
+      "fixture": "State commit, 1k rows one edit",
+      "medianUs": 231.26,
+      "p95Us": 239.49
+    },
+    {
+      "fixture": "Owned patch commit",
+      "medianUs": 0.96,
+      "p95Us": 1.71
+    },
+    {
+      "fixture": "Text position mapping",
+      "medianUs": 0.03,
+      "p95Us": 0.42
+    }
+  ]
+}
