@@ -104,8 +104,53 @@ export interface PatchRouter {
   clear(): void;
 }
 
+export type StateBasisToken = number;
+export type StatePatchStaleMode = 'reject' | 'route' | 'apply';
+
+export interface StatePatchEnvelope {
+  kind: 'frontier.state.patch';
+  patch: Patch;
+  basis: StateBasisToken;
+  nextBasis: StateBasisToken;
+  metadata?: JsonObject;
+}
+
+export interface StatePatchEnvelopeOptions {
+  nextBasis?: StateBasisToken;
+  metadata?: JsonObject;
+}
+
+export interface StateCommitWithBasisOptions extends DiffOptions {
+  metadata?: JsonObject;
+}
+
+export type StatePatchInput = Patch | StatePatchEnvelope;
+
+export interface StatePatchCommitOptions {
+  basis?: StateBasisToken;
+  nextBasis?: StateBasisToken;
+  onStale?: StatePatchStaleMode;
+}
+
+export type StatePatchCommitStatus = 'applied' | 'rejected' | 'routed';
+export type StatePatchCommitReason = 'basis-mismatch' | 'empty-patch';
+
+export interface StatePatchCommitResult {
+  status: StatePatchCommitStatus;
+  applied: boolean;
+  stale: boolean;
+  routed: number;
+  patch: Patch;
+  basis: StateBasisToken;
+  currentBasis: StateBasisToken;
+  nextBasis: StateBasisToken;
+  value: JsonValue | undefined;
+  reason?: StatePatchCommitReason;
+}
+
 export interface StateEngineOptions {
   diff?: EngineOptions;
+  basis?: StateBasisToken;
 }
 
 export interface DeltaView {
@@ -123,12 +168,16 @@ export interface DeltaViewOptions extends WatchOptions {
 
 export interface StateEngine {
   get(): JsonValue | undefined;
+  getBasis(): StateBasisToken;
+  createPatchEnvelope(patch: Patch, options?: StatePatchEnvelopeOptions): StatePatchEnvelope;
   watch(path: WatchPath, callback: PatchWatchCallback): PatchSubscription;
   watch(path: WatchPath, fields: WatchPath[], callback: PatchWatchCallback): PatchSubscription;
   watch(options: WatchOptions, callback: PatchWatchCallback): PatchSubscription;
   commit(next: JsonValue, options?: DiffOptions): Patch;
+  commitWithBasis(next: JsonValue, options?: StateCommitWithBasisOptions): StatePatchEnvelope;
   set(next: JsonValue, options?: DiffOptions): Patch;
-  commitPatch(patch: Patch): JsonValue | undefined;
+  commitPatch(patch: StatePatchInput, options?: StatePatchCommitOptions): JsonValue | undefined;
+  commitPatchWithBasis(patch: StatePatchInput, options?: StatePatchCommitOptions): StatePatchCommitResult;
   view(path: WatchPath): DeltaView;
   view(options: DeltaViewOptions): DeltaView;
   equals(next: JsonValue, options?: DiffOptions): boolean;

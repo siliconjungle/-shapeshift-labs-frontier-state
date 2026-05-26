@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { applyPatchImmutable } from '@shapeshift-labs/frontier/patch';
-import { createStateEngine, mapPath, mapTextPosition } from '../dist/index.js';
+import { createStateEngine, createStatePatchEnvelope, mapPath, mapTextPosition } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
 const cases = readPositiveInt(args.cases, 500);
@@ -48,11 +48,15 @@ function runCase(caseId, rng) {
       const score = expected.rows[rowIndex].score + 1 + randomInt(rng, 5);
       const patch = [[0, ['rows', rowIndex, 'score'], score]];
       expected.rows[rowIndex].score = score;
-      state.commitPatch(patch);
+      const result = state.commitPatchWithBasis(state.createPatchEnvelope(patch));
+      assert.strictEqual(result.applied, true);
+      assert.strictEqual(result.stale, false);
     } else {
       const next = clone(expected);
       mutateDocument(next, rng, choice);
-      const patch = state.commit(next);
+      const envelope = state.commitWithBasis(next);
+      const patch = envelope.patch;
+      assert.strictEqual(envelope.basis + (patch.length === 0 ? 0 : 1), envelope.nextBasis);
       assert.deepStrictEqual(
         applyPatchImmutable(expected, patch),
         next,
@@ -65,6 +69,9 @@ function runCase(caseId, rng) {
       expected = next;
     }
 
+    const staleProbe = state.commitPatchWithBasis(createStatePatchEnvelope([[0, ['meta', 'staleProbe'], step]], state.getBasis() + 1));
+    assert.strictEqual(staleProbe.status, 'rejected');
+    assert.strictEqual(staleProbe.stale, true);
     assert.deepStrictEqual(state.get(), expected, 'state engine value should match expected after step ' + step);
     assert.deepStrictEqual(observed, expected, 'root watcher should replay state after step ' + step);
   }

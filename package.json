@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-state",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Patch-routed app-state subscriptions and maintained views for Frontier.",
   "type": "module",
   "license": "MIT",
@@ -43,8 +43,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@shapeshift-labs/frontier": "0.1.5",
-    "@shapeshift-labs/frontier-engine": "0.1.0"
+    "@shapeshift-labs/frontier": "0.1.8",
+    "@shapeshift-labs/frontier-engine": "0.1.1"
   },
   "scripts": {
     "build": "node build.mjs",

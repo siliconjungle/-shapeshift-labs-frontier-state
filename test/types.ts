@@ -1,6 +1,7 @@
 import {
   createPatchRouter,
   createStateEngine,
+  createStatePatchEnvelope,
   mapPath,
   mapTextPosition,
   mapTextPositions,
@@ -10,6 +11,8 @@ import {
   type Patch,
   type PatchRouter,
   type PatchSubscription,
+  type StatePatchCommitResult,
+  type StatePatchEnvelope,
   type StateEngine,
   type TextPosition
 } from '../dist/index.js';
@@ -49,6 +52,16 @@ const patch: Patch = state.commit({
   text: 'hello!'
 });
 const committed: JsonValue | undefined = state.commitPatch([[0, ['meta'], { saved: true }]]);
+const basis: number = state.getBasis();
+const envelope: StatePatchEnvelope = state.commitWithBasis({
+  rows: [
+    { id: 'a', done: true, score: 2 },
+    { id: 'b', done: true, score: 2 }
+  ],
+  text: 'hello!'
+});
+const manualEnvelope: StatePatchEnvelope = createStatePatchEnvelope([[0, ['meta', 'saved'], true]], basis);
+const basisResult: StatePatchCommitResult = state.commitPatchWithBasis(manualEnvelope, { onStale: 'route' });
 const view: DeltaView = state.view('/rows');
 const value: JsonValue | undefined = state.get();
 const equal: boolean = state.equals(value as JsonValue);
@@ -67,6 +80,8 @@ const positions: Array<TextPosition | null> = mapTextPositions(
 void routedSubscription;
 void watched;
 void committed;
+void envelope;
+void basisResult;
 void view;
 void equal;
 void path;

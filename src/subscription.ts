@@ -39,8 +39,16 @@ import type {
   PatchRouter,
   PatchSubscription,
   PatchWatchCallback,
+  StateBasisToken,
+  StateCommitWithBasisOptions,
   StateEngine,
   StateEngineOptions,
+  StatePatchCommitOptions,
+  StatePatchCommitReason,
+  StatePatchCommitResult,
+  StatePatchEnvelope,
+  StatePatchEnvelopeOptions,
+  StatePatchInput,
   TrainingSample,
   WatchOptions,
   WatchRange,
@@ -278,6 +286,9 @@ export function createPatchRouter(): PatchRouter {
       const op = patch[0];
       if (singletonRouteKind === 1) {
         const singletonCount = routeSingletonExact(singletonExactEntry as WatchEntry, singletonExactPath as JsonPath, op, patch);
+        if (singletonCount === 1 && (singletonExactEntry as WatchEntry).active) {
+          (singletonExactEntry as WatchEntry).callback(patch);
+        }
         if (singletonCount !== -1) return singletonCount;
       } else if (singletonRouteKind === 2) {
         const singletonRowFieldCount = routeSingletonRowField(
@@ -288,6 +299,9 @@ export function createPatchRouter(): PatchRouter {
           op,
           patch
         );
+        if (singletonRowFieldCount === 1 && (singletonRowFieldEntry as WatchEntry).active) {
+          (singletonRowFieldEntry as WatchEntry).callback(patch);
+        }
         if (singletonRowFieldCount !== -1) return singletonRowFieldCount;
       }
       const cachedCount = dispatchCachedOperationRoute(indexes, op, patch);
@@ -403,6 +417,26 @@ export function createPatchRouter(): PatchRouter {
   };
 }
 
+export function createStatePatchEnvelope(
+  patch: Patch,
+  basis: StateBasisToken,
+  options: StatePatchEnvelopeOptions = {}
+): StatePatchEnvelope {
+  if (!Array.isArray(patch)) throw new TypeError('state patch envelope patch must be an array');
+  const normalizedBasis = readStateBasisToken(basis, 'state patch basis');
+  const envelope: StatePatchEnvelope = {
+    kind: 'frontier.state.patch',
+    patch,
+    basis: normalizedBasis,
+    nextBasis: readStateBasisToken(
+      options.nextBasis !== undefined ? options.nextBasis : normalizedBasis + (patch.length === 0 ? 0 : 1),
+      'state patch nextBasis'
+    )
+  };
+  if (options.metadata !== undefined) envelope.metadata = cloneJson(options.metadata);
+  return envelope;
+}
+
 export function createStateEngine(initial?: JsonValue, options?: StateEngineOptions): StateEngine {
   const router = createPatchRouter();
   const routePatch = router.route;
@@ -416,6 +450,7 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
     rangeWatches: 0
   };
   let current = initial;
+  let basis = readStateBasisToken(options && options.basis !== undefined ? options.basis : 0, 'state basis');
 
   function watch(pathOrOptions: WatchPath | WatchOptions, fieldsOrCallback: WatchPath[] | PatchWatchCallback, callback?: PatchWatchCallback): PatchSubscription {
     observeStateWatchPlan(statePlanStats, pathOrOptions, fieldsOrCallback);
@@ -427,17 +462,92 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
       ? [[OP_SET, [], cloneJson(next)] as PatchOperation]
       : diffEngine.diff(current, next, options as any);
     current = next;
-    routePatch(patch);
+    routeAndAdvancePatch(patch);
     return patch;
   }
 
-  function commitPatch(patch: Patch): JsonValue | undefined {
+  function commitWithBasis(next: JsonValue, options?: StateCommitWithBasisOptions): StatePatchEnvelope {
+    const patchBasis = basis;
+    const patch = commit(next, options);
+    return createStatePatchEnvelope(patch, patchBasis, { nextBasis: basis, metadata: options && options.metadata });
+  }
+
+  function commitPatch(input: StatePatchInput, options?: StatePatchCommitOptions): JsonValue | undefined {
+    if (isStatePatchEnvelope(input) || options !== undefined && options.basis !== undefined) {
+      const result = commitPatchWithBasis(input, options);
+      if (!result.applied && result.status === 'rejected') {
+        throw new TypeError('state patch basis validation failed: ' + result.reason);
+      }
+      return result.value;
+    }
+    applyAndRoutePatch(input as Patch);
+    return current;
+  }
+
+  function commitPatchWithBasis(input: StatePatchInput, options: StatePatchCommitOptions = {}): StatePatchCommitResult {
+    const envelope = isStatePatchEnvelope(input) ? input : null;
+    const patch = envelope ? envelope.patch : input as Patch;
+    const patchBasis = readStateBasisToken(
+      options.basis !== undefined ? options.basis : envelope ? envelope.basis : basis,
+      'state patch basis'
+    );
+    const currentBasis = basis;
+    const stale = patchBasis !== currentBasis;
+    const reason: StatePatchCommitReason | undefined = stale ? 'basis-mismatch' : patch.length === 0 ? 'empty-patch' : undefined;
+    const onStale = options.onStale || 'reject';
+
+    if (stale && onStale !== 'apply') {
+      const routed = onStale === 'route' ? routePatch(patch) : 0;
+      return {
+        status: onStale === 'route' ? 'routed' : 'rejected',
+        applied: false,
+        stale: true,
+        routed,
+        patch,
+        basis: patchBasis,
+        currentBasis,
+        nextBasis: basis,
+        value: current,
+        reason
+      };
+    }
+
+    const nextBasis = readPatchNextBasis(
+      patch,
+      currentBasis,
+      options.nextBasis !== undefined ? options.nextBasis : stale && onStale === 'apply' ? undefined : envelope && envelope.nextBasis
+    );
+    const routed = applyAndRoutePatch(patch, nextBasis);
+    return {
+      status: 'applied',
+      applied: true,
+      stale,
+      routed,
+      patch,
+      basis: patchBasis,
+      currentBasis,
+      nextBasis: basis,
+      value: current,
+      reason
+    };
+  }
+
+  function createPatchEnvelope(patch: Patch, options?: StatePatchEnvelopeOptions): StatePatchEnvelope {
+    return createStatePatchEnvelope(patch, basis, options);
+  }
+
+  function applyAndRoutePatch(patch: Patch, nextBasis?: StateBasisToken): number {
     if (current !== undefined) {
       const fast = applyStatePatchFast(current, patch);
       current = fast === NO_STATE_PATCH_FAST_PATH ? applyPatch(current, patch) : fast;
     }
-    routePatch(patch);
-    return current;
+    return routeAndAdvancePatch(patch, nextBasis);
+  }
+
+  function routeAndAdvancePatch(patch: Patch, nextBasis?: StateBasisToken): number {
+    const routed = routePatch(patch);
+    if (patch.length !== 0) basis = nextBasis === undefined ? basis + 1 : nextBasis;
+    return routed;
   }
 
   function view(pathOrOptions: WatchPath | DeltaViewOptions): DeltaView {
@@ -479,10 +589,16 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
     get() {
       return current;
     },
+    getBasis() {
+      return basis;
+    },
+    createPatchEnvelope,
     watch,
     commit,
+    commitWithBasis,
     set: commit,
     commitPatch,
+    commitPatchWithBasis,
     view,
     equals,
     train,
@@ -490,6 +606,36 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
     loadProfile,
     clear
   };
+}
+
+function isStatePatchEnvelope(value: StatePatchInput): value is StatePatchEnvelope {
+  return value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as StatePatchEnvelope).kind === 'frontier.state.patch' &&
+    Array.isArray((value as StatePatchEnvelope).patch);
+}
+
+function readPatchNextBasis(
+  patch: Patch,
+  currentBasis: StateBasisToken,
+  value: StateBasisToken | null | false | undefined
+): StateBasisToken {
+  if (patch.length === 0) return currentBasis;
+  const nextBasis = value === undefined || value === null || value === false
+    ? currentBasis + 1
+    : readStateBasisToken(value, 'state patch nextBasis');
+  if (nextBasis <= currentBasis) {
+    throw new RangeError('state patch nextBasis must advance the current basis');
+  }
+  return nextBasis;
+}
+
+function readStateBasisToken(value: unknown, label: string): StateBasisToken {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new TypeError(label + ' must be a non-negative safe integer');
+  }
+  return value as number;
 }
 
 function observeStateWatchPlan(
@@ -1807,13 +1953,11 @@ function routeSingletonExact(entry: WatchEntry, watchPath: JsonPath, op: PatchOp
                 watchPath[3] === opPath[3]
               : isPathPrefix(watchPath, opPath)
           ) {
-            entry.callback(patch);
             return 1;
           }
           return 0;
         }
         if (pathOverlaps(watchPath, opPath)) {
-          entry.callback(patch);
           return 1;
         }
       }
@@ -1824,14 +1968,12 @@ function routeSingletonExact(entry: WatchEntry, watchPath: JsonPath, op: PatchOp
     case OP_ARRAY_TWO_FIELD_INSERT:
     case OP_ARRAY_MOVE:
       if (pathOverlaps(watchPath, op[1])) {
-        entry.callback(patch);
         return 1;
       }
       return 0;
     case OP_STRING_SPLICE:
     case OP_STRING_COPY:
       if (isPathPrefix(watchPath, op[1])) {
-        entry.callback(patch);
         return 1;
       }
       return 0;
@@ -1856,7 +1998,6 @@ function routeSingletonRowField(
   const field = fields[0];
   if (field.length !== 2) return -1;
   if (field[0] === field0 && field[1] === field1) {
-    entry.callback(patch);
     return 1;
   }
   return 0;

@@ -51,11 +51,14 @@ function formatUs(value) { return value >= 1000 ? (value / 1000).toFixed(2) + ' 
 function padRight(value, width) { return String(value).padEnd(width); }
 function padLeft(value, width) { return String(value).padStart(width); }
 
-import { createPatchRouter, createStateEngine, mapTextPosition } from '../dist/index.js';
+import { createPatchRouter, createStateEngine, createStatePatchEnvelope, mapTextPosition } from '../dist/index.js';
 
 const patch = [[0, ['rows', 512, 'score'], 9999]];
 const router = createPatchRouter();
 router.watch('/rows/512/score', () => { sink++; });
+const staleEnvelope = createStatePatchEnvelope(patch, 999);
+const routeStaleState = createStateEngine({ rows: makeRows(1000), text: 'hello world' });
+routeStaleState.watch('/rows/512/score', () => { sink++; });
 const before = { rows: makeRows(1000), text: 'hello world' };
 const after = cloneJson(before);
 after.rows[512] = { ...after.rows[512], score: 9999 };
@@ -64,6 +67,10 @@ const rows = [
   runRow('Patch router exact path dispatch', 8000, () => { sink += router.route(patch); }),
   runRow('State commit, 1k rows one edit', 300, () => { const doc = createStateEngine(before, { diff: { arrayKey: 'id' } }); sink += doc.commit(after).length; }),
   runRow('Owned patch commit', 5000, () => { const doc = createStateEngine(before); sink += Object.keys(doc.commitPatch(patch) || {}).length; }),
+  runRow('Patch envelope create', 8000, () => { sink += createStatePatchEnvelope(patch, 1).nextBasis; }),
+  runRow('Owned patch commit with basis', 5000, () => { const doc = createStateEngine(before); const result = doc.commitPatchWithBasis(doc.createPatchEnvelope(patch)); if (result.applied) sink += Object.keys(result.value || {}).length; }),
+  runRow('Stale patch basis reject', 8000, () => { const result = routeStaleState.commitPatchWithBasis(staleEnvelope); if (result.stale) sink += result.currentBasis; }),
+  runRow('Stale patch basis route', 8000, () => { const result = routeStaleState.commitPatchWithBasis(staleEnvelope, { onStale: 'route' }); sink += result.routed; }),
   runRow('Text position mapping', 8000, () => { const mapped = mapTextPosition(['text'], 3, [[5, ['text'], 2, 0, 'X']], { validate: false }); sink += mapped ? mapped.offset : 0; })
 ];
 state.commit(after);

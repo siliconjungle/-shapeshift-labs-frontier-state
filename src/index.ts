@@ -1,4 +1,4 @@
-export { createPatchRouter, createStateEngine } from './subscription.js';
+export { createPatchRouter, createStateEngine, createStatePatchEnvelope } from './subscription.js';
 export { mapPath, mapTextPosition, mapTextPositions } from './path-map.js';
 
 export type {
@@ -19,8 +19,18 @@ export type {
   PatchSubscription,
   PatchWatchCallback,
   PathSegment,
+  StateBasisToken,
+  StateCommitWithBasisOptions,
   StateEngine,
   StateEngineOptions,
+  StatePatchCommitOptions,
+  StatePatchCommitReason,
+  StatePatchCommitResult,
+  StatePatchCommitStatus,
+  StatePatchEnvelope,
+  StatePatchEnvelopeOptions,
+  StatePatchInput,
+  StatePatchStaleMode,
   TextPosition,
   WatchOptions,
   WatchPath,
