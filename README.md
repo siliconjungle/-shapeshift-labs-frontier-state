@@ -209,18 +209,18 @@ Run the package-local benchmark:
 npm run bench
 ```
 
-Latest local package benchmark on Node v26.1.0, darwin arm64, 9 rounds:
+Latest local package benchmark on Node v26.1.0, darwin arm64, 120 rounds:
 
 | Fixture | Median | p95 |
 | --- | ---: | ---: |
-| Patch router exact path dispatch | 0.04 us | 0.05 us |
-| State commit, 1k rows one edit | 229.71 us | 236.44 us |
-| Owned patch commit | 1.15 us | 1.39 us |
-| Patch envelope create | 0.02 us | 0.02 us |
-| Owned patch commit with basis | 0.85 us | 1.34 us |
-| Stale patch basis reject | 0.03 us | 0.03 us |
-| Stale patch basis route | 0.04 us | 0.25 us |
-| Text position mapping | 0.03 us | 0.09 us |
+| Patch router exact path dispatch | 0.02 us | 0.03 us |
+| State commit, 1k rows one edit | 224.63 us | 233.44 us |
+| Owned patch commit | 0.08 us | 0.10 us |
+| Patch envelope create | 0.00 us | 0.01 us |
+| Owned patch commit with basis | 0.10 us | 0.13 us |
+| Stale patch basis reject | 0.01 us | 0.02 us |
+| Stale patch basis route | 0.03 us | 0.04 us |
+| Text position mapping | 0.02 us | 0.03 us |
 
 These are Frontier-only package measurements, not competitor comparisons.
 

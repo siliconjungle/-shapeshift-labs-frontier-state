@@ -438,10 +438,12 @@ export function createStatePatchEnvelope(
 }
 
 export function createStateEngine(initial?: JsonValue, options?: StateEngineOptions): StateEngine {
-  const router = createPatchRouter();
-  const routePatch = router.route;
-  const diffEngine = createDiffEngine((options && options.diff) as any);
-  let profilePlans = readProfilePlans((options && options.diff && options.diff.profile) as any);
+  let router: PatchRouter | null = null;
+  let diffEngine: ReturnType<typeof createDiffEngine> | null = null;
+  let pendingProfile: DiffProfile | null | undefined;
+  let hasPendingProfile = false;
+  const diffOptions = (options && options.diff) as any;
+  let profilePlans = readProfilePlans((diffOptions && diffOptions.profile) as any);
   const statePlanStats: StateProfilePlanStats = {
     watches: 0,
     exactWatches: 0,
@@ -454,13 +456,13 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
 
   function watch(pathOrOptions: WatchPath | WatchOptions, fieldsOrCallback: WatchPath[] | PatchWatchCallback, callback?: PatchWatchCallback): PatchSubscription {
     observeStateWatchPlan(statePlanStats, pathOrOptions, fieldsOrCallback);
-    return router.watch(pathOrOptions as any, fieldsOrCallback as any, callback as any);
+    return getRouter().watch(pathOrOptions as any, fieldsOrCallback as any, callback as any);
   }
 
   function commit(next: JsonValue, options?: DiffOptions): Patch {
     const patch = current === undefined
       ? [[OP_SET, [], cloneJson(next)] as PatchOperation]
-      : diffEngine.diff(current, next, options as any);
+      : getDiffEngine().diff(current, next, options as any);
     current = next;
     routeAndAdvancePatch(patch);
     return patch;
@@ -557,32 +559,51 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
       typeof pathOrOptions === 'object' && !Array.isArray(pathOrOptions)
         ? pathOrOptions
         : { path: pathOrOptions },
-      options && options.diff ? diffEngine.diff : undefined
+      options && options.diff ? (source, target) => getDiffEngine().diff(source, target) : undefined
     );
   }
 
   function clear() {
-    router.clear();
-    diffEngine.clear();
+    if (router !== null) router.clear();
+    if (diffEngine !== null) diffEngine.clear();
   }
 
   function equals(next: JsonValue, options?: DiffOptions): boolean {
-    return current !== undefined && diffEngine.equals(current, next, options as any);
+    return current !== undefined && getDiffEngine().equals(current, next, options as any);
   }
 
   function train(samples: TrainingSample[]): DiffProfile {
-    return diffEngine.train(samples as any) as any;
+    return getDiffEngine().train(samples as any) as any;
   }
 
   function getProfile(): DiffProfile {
-    const profile = diffEngine.getProfile();
+    const profile = getDiffEngine().getProfile();
     const plans = createStateProfilePlansSnapshot((profilePlans || profile.plans) as any, statePlanStats);
     return (plans === undefined ? profile : { ...profile, plans }) as any;
   }
 
   function loadProfile(profile?: DiffProfile | null): void {
     profilePlans = readProfilePlans(profile as any);
-    diffEngine.loadProfile(profile as any);
+    pendingProfile = profile;
+    hasPendingProfile = true;
+    if (diffEngine !== null) diffEngine.loadProfile(profile as any);
+  }
+
+  function getDiffEngine(): ReturnType<typeof createDiffEngine> {
+    if (diffEngine === null) {
+      diffEngine = createDiffEngine(diffOptions);
+      if (hasPendingProfile) diffEngine.loadProfile(pendingProfile as any);
+    }
+    return diffEngine;
+  }
+
+  function getRouter(): PatchRouter {
+    if (router === null) router = createPatchRouter();
+    return router;
+  }
+
+  function routePatch(patch: Patch): number {
+    return router === null ? 0 : router.route(patch);
   }
 
   return {

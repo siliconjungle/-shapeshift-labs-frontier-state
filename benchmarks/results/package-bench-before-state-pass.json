@@ -1,7 +1,7 @@
 {
   "package": "@shapeshift-labs/frontier-state",
   "version": "0.1.1",
-  "generatedAt": "2026-05-28T13:56:39.322Z",
+  "generatedAt": "2026-05-28T13:54:40.559Z",
   "node": "v26.1.0",
   "platform": "darwin arm64",
   "rounds": 120,
@@ -13,13 +13,13 @@
     },
     {
       "fixture": "State commit, 1k rows one edit",
-      "medianUs": 224.63,
-      "p95Us": 233.44
+      "medianUs": 251.11,
+      "p95Us": 266.17
     },
     {
       "fixture": "Owned patch commit",
-      "medianUs": 0.08,
-      "p95Us": 0.1
+      "medianUs": 0.81,
+      "p95Us": 1.29
     },
     {
       "fixture": "Patch envelope create",
@@ -28,13 +28,13 @@
     },
     {
       "fixture": "Owned patch commit with basis",
-      "medianUs": 0.1,
-      "p95Us": 0.13
+      "medianUs": 0.8,
+      "p95Us": 1.22
     },
     {
       "fixture": "Stale patch basis reject",
       "medianUs": 0.01,
-      "p95Us": 0.02
+      "p95Us": 0.03
     },
     {
       "fixture": "Stale patch basis route",
