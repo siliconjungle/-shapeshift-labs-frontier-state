@@ -43,12 +43,14 @@ import type {
   StateCommitWithBasisOptions,
   StateEngine,
   StateEngineOptions,
+  StateEngineRegistryOptions,
   StatePatchCommitOptions,
   StatePatchCommitReason,
   StatePatchCommitResult,
   StatePatchEnvelope,
   StatePatchEnvelopeOptions,
   StatePatchInput,
+  StateRegistrySink,
   TrainingSample,
   WatchOptions,
   WatchRange,
@@ -148,6 +150,20 @@ type WatchCall = {
   path: WatchPath | WatchOptions;
   fieldsOrCallback: WatchPath[] | PatchWatchCallback;
   callback?: PatchWatchCallback;
+};
+
+type StateRegistryTracker = {
+  registerWatch(paths: readonly JsonPath[], range: boolean): void;
+  recordPatch(kind: string, patch: Patch, info: StateRegistryPatchInfo): void;
+};
+
+type StateRegistryPatchInfo = {
+  status: string;
+  basis: StateBasisToken;
+  nextBasis: StateBasisToken;
+  routed: number;
+  stale?: boolean;
+  reason?: StatePatchCommitReason;
 };
 
 export function createPatchRouter(): PatchRouter {
@@ -443,6 +459,7 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
   let pendingProfile: DiffProfile | null | undefined;
   let hasPendingProfile = false;
   const diffOptions = (options && options.diff) as any;
+  const registryTracker = createStateRegistryTracker(options && options.registry);
   let profilePlans = readProfilePlans((diffOptions && diffOptions.profile) as any);
   const statePlanStats: StateProfilePlanStats = {
     watches: 0,
@@ -456,6 +473,10 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
 
   function watch(pathOrOptions: WatchPath | WatchOptions, fieldsOrCallback: WatchPath[] | PatchWatchCallback, callback?: PatchWatchCallback): PatchSubscription {
     observeStateWatchPlan(statePlanStats, pathOrOptions, fieldsOrCallback);
+    if (registryTracker !== null) {
+      const parsed = parseWatchCall({ path: pathOrOptions, fieldsOrCallback, callback });
+      registryTracker.registerWatch(expandWatchPaths(parsed.path, parsed.fields), parsed.range !== null);
+    }
     return getRouter().watch(pathOrOptions as any, fieldsOrCallback as any, callback as any);
   }
 
@@ -464,7 +485,14 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
       ? [[OP_SET, [], cloneJson(next)] as PatchOperation]
       : getDiffEngine().diff(current, next, options as any);
     current = next;
-    routeAndAdvancePatch(patch);
+    const previousBasis = basis;
+    const routed = routeAndAdvancePatch(patch);
+    registryTracker?.recordPatch('state.commit', patch, {
+      status: 'ok',
+      basis: previousBasis,
+      nextBasis: basis,
+      routed
+    });
     return patch;
   }
 
@@ -482,7 +510,14 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
       }
       return result.value;
     }
-    applyAndRoutePatch(input as Patch);
+    const previousBasis = basis;
+    const routed = applyAndRoutePatch(input as Patch);
+    registryTracker?.recordPatch('state.commitPatch', input as Patch, {
+      status: 'ok',
+      basis: previousBasis,
+      nextBasis: basis,
+      routed
+    });
     return current;
   }
 
@@ -500,6 +535,14 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
 
     if (stale && onStale !== 'apply') {
       const routed = onStale === 'route' ? routePatch(patch) : 0;
+      registryTracker?.recordPatch('state.commitPatchWithBasis', patch, {
+        status: onStale === 'route' ? 'routed' : 'rejected',
+        basis: patchBasis,
+        nextBasis: basis,
+        routed,
+        stale: true,
+        reason
+      });
       return {
         status: onStale === 'route' ? 'routed' : 'rejected',
         applied: false,
@@ -520,6 +563,14 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
       options.nextBasis !== undefined ? options.nextBasis : stale && onStale === 'apply' ? undefined : envelope && envelope.nextBasis
     );
     const routed = applyAndRoutePatch(patch, nextBasis);
+    registryTracker?.recordPatch('state.commitPatchWithBasis', patch, {
+      status: 'ok',
+      basis: patchBasis,
+      nextBasis: basis,
+      routed,
+      stale,
+      reason
+    });
     return {
       status: 'applied',
       applied: true,
@@ -657,6 +708,117 @@ function readStateBasisToken(value: unknown, label: string): StateBasisToken {
     throw new TypeError(label + ' must be a non-negative safe integer');
   }
   return value as number;
+}
+
+function createStateRegistryTracker(input: StateEngineOptions['registry'] | undefined): StateRegistryTracker | null {
+  if (input === undefined || input === null) return null;
+  const options = isStateRegistryOptions(input)
+    ? input
+    : { registry: input as StateRegistrySink };
+  const sink = options.registry;
+  if (sink === null || typeof sink !== 'object') return null;
+
+  const baseId = options.id || 'frontier.state';
+  const packageName = options.package || '@shapeshift-labs/frontier-state';
+  const baseTags = options.tags ? options.tags.slice() : [];
+  let watchId = 0;
+  let recordId = 0;
+
+  sink.register?.({
+    id: baseId,
+    kind: 'state',
+    package: packageName,
+    feature: options.feature,
+    owner: options.owner,
+    source: options.source,
+    tags: uniqueRegistryStrings(baseTags.concat('state')),
+    description: 'Frontier state engine'
+  });
+
+  return {
+    registerWatch(paths, range) {
+      const id = baseId + '.watch.' + (++watchId);
+      sink.register?.({
+        id,
+        kind: 'subscription',
+        package: packageName,
+        feature: options.feature,
+        owner: options.owner,
+        source: options.source,
+        reads: paths.map((path) => path.slice()),
+        tags: uniqueRegistryStrings(baseTags.concat(range ? 'state-range-watch' : 'state-watch')),
+        dependsOn: [baseId],
+        description: 'Frontier state subscription'
+      });
+    },
+    recordPatch(kind, patch, info) {
+      const metadata: { [key: string]: JsonValue } = {
+        operation: kind,
+        basis: info.basis,
+        nextBasis: info.nextBasis,
+        routed: info.routed,
+        opCount: patch.length
+      };
+      if (info.stale !== undefined) metadata.stale = info.stale;
+      if (info.reason !== undefined) metadata.reason = info.reason;
+      const record = {
+        id: baseId + '.record.' + (++recordId),
+        entryId: baseId,
+        kind: 'state',
+        status: info.status,
+        writes: collectPatchWritePaths(patch),
+        input: options.includePatchValues === true ? cloneJson(patch) : undefined,
+        metadata,
+        startedAt: options.now?.()
+      };
+      sink.record?.(record);
+    }
+  };
+}
+
+function isStateRegistryOptions(input: StateEngineOptions['registry']): input is StateEngineRegistryOptions {
+  return input !== undefined &&
+    input !== null &&
+    typeof input === 'object' &&
+    'registry' in input;
+}
+
+function collectPatchWritePaths(patch: Patch): JsonPath[] {
+  const out: JsonPath[] = [];
+  for (let i = 0; i < patch.length; i++) {
+    const op = patch[i];
+    pushUniquePath(out, op[1]);
+    if (op[0] === OP_ASSIGN) {
+      const fields = op[2];
+      for (const key of Object.keys(fields)) pushUniquePath(out, op[1].concat(key));
+    } else if (op[0] === OP_ARRAY_OBJECT_ASSIGN) {
+      pushUniquePath(out, op[1].concat('*'));
+    } else if (op[0] === OP_ARRAY_TUPLE_ASSIGN) {
+      const fields = op[3];
+      for (let j = 0; j < fields.length; j++) pushUniquePath(out, op[1].concat('*', fields[j]));
+    } else if (op[0] === OP_ARRAY_OBJECT_FIELD_ASSIGN) {
+      const fields = op[3];
+      for (let j = 0; j < fields.length; j++) pushUniquePath(out, op[1].concat('*', fields[j]));
+    }
+  }
+  return out;
+}
+
+function pushUniquePath(paths: JsonPath[], path: readonly (string | number)[]): void {
+  const next = path.slice() as JsonPath;
+  const key = JSON.stringify(next);
+  for (let i = 0; i < paths.length; i++) {
+    if (JSON.stringify(paths[i]) === key) return;
+  }
+  paths[paths.length] = next;
+}
+
+function uniqueRegistryStrings(values: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < values.length; i++) {
+    if (!out.includes(values[i])) out[out.length] = values[i];
+  }
+  return out;
 }
 
 function observeStateWatchPlan(

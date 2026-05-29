@@ -13,10 +13,12 @@ import {
   type PatchSubscription,
   type StatePatchCommitResult,
   type StatePatchEnvelope,
+  type StateRegistrySink,
   type StateEngine,
   type TextPosition
 } from '../dist/index.js';
 import { mapPath as mapPathSubpath } from '../dist/path-map.js';
+import { createFrontierRegistry } from '@shapeshift-labs/frontier/registry';
 
 const initial: JsonValue = {
   rows: [
@@ -36,6 +38,16 @@ const state: StateEngine = createStateEngine(initial, {
   diff: {
     arrayKey: 'id',
     adaptive: true
+  }
+});
+const registrySink: StateRegistrySink = createFrontierRegistry();
+const registeredState: StateEngine = createStateEngine(initial, {
+  registry: {
+    registry: registrySink,
+    id: 'types.state',
+    feature: 'types',
+    source: { file: 'src/types-state.ts' },
+    tags: ['state']
   }
 });
 
@@ -88,3 +100,4 @@ void path;
 void subpath;
 void position;
 void positions;
+void registeredState;

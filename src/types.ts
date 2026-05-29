@@ -4,6 +4,11 @@ import type {
   EngineOptions,
   TrainingSample
 } from '@shapeshift-labs/frontier-engine/types';
+import type {
+  FrontierRegistryEdge,
+  FrontierRegistryEntry,
+  FrontierRegistryRecord
+} from '@shapeshift-labs/frontier/registry';
 
 export type {
   DiffOptions,
@@ -151,6 +156,25 @@ export interface StatePatchCommitResult {
 export interface StateEngineOptions {
   diff?: EngineOptions;
   basis?: StateBasisToken;
+  registry?: StateRegistrySink | StateEngineRegistryOptions;
+}
+
+export interface StateRegistrySink {
+  register?(entry: FrontierRegistryEntry): unknown;
+  record?(record: FrontierRegistryRecord, options?: { edges?: readonly FrontierRegistryEdge[] }): unknown;
+  edge?(edge: FrontierRegistryEdge): unknown;
+}
+
+export interface StateEngineRegistryOptions {
+  registry: StateRegistrySink;
+  id?: string;
+  package?: string;
+  feature?: string;
+  owner?: string;
+  source?: FrontierRegistryEntry['source'];
+  tags?: readonly string[];
+  includePatchValues?: boolean;
+  now?: () => number;
 }
 
 export interface DeltaView {

@@ -8,6 +8,10 @@ import {
   mapTextPositions
 } from '../dist/index.js';
 import { mapPath as mapPathSubpath } from '../dist/path-map.js';
+import {
+  createFrontierRegistry,
+  frontierRegistryImpact
+} from '@shapeshift-labs/frontier/registry';
 
 assert.strictEqual(typeof createPatchRouter, 'function');
 assert.strictEqual(typeof createStateEngine, 'function');
@@ -84,6 +88,33 @@ assert.strictEqual(rawApplied.status, 'applied');
 assert.strictEqual(rawApplied.nextBasis, 3);
 assert.strictEqual(receiving.getBasis(), 3);
 assert.deepStrictEqual(receiving.get(), { todos: [{ id: 'a', done: true }], text: 'updated' });
+
+const appRegistry = createFrontierRegistry({ generatedAt: () => 456 });
+const registeredState = createStateEngine(
+  { todos: [{ id: 'a', done: false }] },
+  {
+    diff: { arrayKey: 'id' },
+    registry: {
+      registry: appRegistry,
+      id: 'app.todos.state',
+      feature: 'todos',
+      owner: 'state-team',
+      source: { file: 'src/features/todos/state.ts', exportName: 'createTodosState' },
+      tags: ['app-state']
+    }
+  }
+);
+registeredState.watch('/todos/0/done', () => undefined);
+registeredState.commit({ todos: [{ id: 'a', done: true }] });
+const stateGraph = appRegistry.inspect();
+assert.strictEqual(stateGraph.generatedAt, 456);
+assert.ok(stateGraph.entries.some((entry) => entry.id === 'app.todos.state' && entry.kind === 'state'));
+assert.ok(stateGraph.entries.some((entry) => entry.kind === 'subscription'));
+assert.ok(stateGraph.edges.some((edge) => edge.kind === 'declares-read' && edge.to === 'path:/todos/0/done'));
+assert.ok(stateGraph.records.some((record) => record.entryId === 'app.todos.state'));
+assert.ok(stateGraph.edges.some((edge) => edge.from.startsWith('record:') && edge.to === 'path:/todos/0/done'));
+const stateImpact = frontierRegistryImpact(stateGraph, { paths: ['/todos/0/done'] });
+assert.ok(stateImpact.entries.some((entry) => entry.kind === 'subscription'));
 
 const mapped = mapPath(['todos', 0, 'done'], [[1, ['todos', 0, 'done']]], { validate: false });
 assert.strictEqual(mapped, null);
