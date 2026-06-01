@@ -16,7 +16,7 @@ import {
   OP_ARRAY_TWO_FIELD_INSERT
 } from '@shapeshift-labs/frontier/constants';
 import { assertPatch } from '@shapeshift-labs/frontier/patch';
-import type { JsonPath, MapPathOptions, Patch, TextPosition } from './types.js';
+import type { JsonPath, MapPathOptions, Patch, TextPosition } from './types.ts';
 
 export function mapPath(path: JsonPath, patch: Patch, options?: MapPathOptions): JsonPath | null {
   assertPath(path);

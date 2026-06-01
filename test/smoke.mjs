@@ -38,6 +38,29 @@ assert.strictEqual(patches, 1);
 assert.deepStrictEqual(state.get(), { todos: [{ id: 'a', done: true }], text: 'hello' });
 assert.strictEqual(state.getBasis(), 1);
 
+let migrationReport;
+const migratedState = createStateEngine(
+  { $version: '1', todos: [{ id: 'a', text: 'old' }] },
+  {
+    migration: {
+      migrateInitial(value) {
+        return {
+          kind: 'frontier.migration.runtime-data.result',
+          data: { $version: '2', todos: [{ id: 'a', title: value.todos[0].text }] },
+          version: '2',
+          changed: true,
+          report: { kind: 'frontier.migration.report', source: 'idb:app-state' }
+        };
+      },
+      onReport(report) {
+        migrationReport = report;
+      }
+    }
+  }
+);
+assert.deepStrictEqual(migratedState.get(), { $version: '2', todos: [{ id: 'a', title: 'old' }] });
+assert.deepStrictEqual(migrationReport, { kind: 'frontier.migration.report', source: 'idb:app-state' });
+
 const authored = createStateEngine({ todos: [{ id: 'a', done: false }], text: 'hello' }, { diff: { arrayKey: 'id' } });
 const envelope = authored.commitWithBasis(
   { todos: [{ id: 'a', done: true }], text: 'hello' },

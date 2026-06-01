@@ -19,7 +19,7 @@ import { applyPatch } from '@shapeshift-labs/frontier/apply';
 import { cloneJson } from '@shapeshift-labs/frontier/clone';
 import { diff } from '@shapeshift-labs/frontier/diff';
 import { createDiffEngine } from '@shapeshift-labs/frontier-engine/engine';
-import { setOwnValue } from './object.js';
+import { setOwnValue } from './object.ts';
 import { getPath, parsePointer } from '@shapeshift-labs/frontier/pointer';
 import {
   createStateProfilePlansSnapshot,
@@ -55,7 +55,7 @@ import type {
   WatchOptions,
   WatchRange,
   WatchPath
-} from './types.js';
+} from './types.ts';
 
 const WILDCARD = '*';
 const hasOwn = Object.prototype.hasOwnProperty;
@@ -468,8 +468,8 @@ export function createStateEngine(initial?: JsonValue, options?: StateEngineOpti
     fieldWatches: 0,
     rangeWatches: 0
   };
-  let current = initial;
   let basis = readStateBasisToken(options && options.basis !== undefined ? options.basis : 0, 'state basis');
+  let current = migrateInitialState(initial, options, basis);
 
   function watch(pathOrOptions: WatchPath | WatchOptions, fieldsOrCallback: WatchPath[] | PatchWatchCallback, callback?: PatchWatchCallback): PatchSubscription {
     observeStateWatchPlan(statePlanStats, pathOrOptions, fieldsOrCallback);
@@ -708,6 +708,41 @@ function readStateBasisToken(value: unknown, label: string): StateBasisToken {
     throw new TypeError(label + ' must be a non-negative safe integer');
   }
   return value as number;
+}
+
+function migrateInitialState(
+  initial: JsonValue | undefined,
+  options: StateEngineOptions | undefined,
+  basis: StateBasisToken
+): JsonValue | undefined {
+  const migration = options?.migration;
+  if (!migration?.migrateInitial) return initial;
+  const context = {
+    source: 'frontier.state.initial' as const,
+    basis
+  };
+  const result = migration.migrateInitial(initial, context);
+  if (isPromiseLike(result)) {
+    throw new TypeError('state migration migrateInitial must be synchronous; migrate data before createStateEngine for async sources');
+  }
+  const data = isStateInitialMigrationResult(result) ? result.data : result === undefined ? initial : result;
+  const report = isStateInitialMigrationResult(result) ? result.report : undefined;
+  if (report !== undefined) migration.onReport?.(report, context);
+  return data;
+}
+
+function isStateInitialMigrationResult(value: unknown): value is { data: JsonValue | undefined; report?: unknown } {
+  if (value === null || typeof value !== 'object' || !('data' in value)) return false;
+  const candidate = value as { kind?: unknown; report?: unknown; version?: unknown; changed?: unknown };
+  return candidate.kind === 'frontier.migration.result'
+    || candidate.kind === 'frontier.migration.runtime-data.result'
+    || candidate.report !== undefined
+    || candidate.version !== undefined
+    || candidate.changed !== undefined;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
 }
 
 function createStateRegistryTracker(input: StateEngineOptions['registry'] | undefined): StateRegistryTracker | null {

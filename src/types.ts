@@ -153,10 +153,34 @@ export interface StatePatchCommitResult {
   reason?: StatePatchCommitReason;
 }
 
+export interface StateInitialMigrationContext {
+  readonly source: 'frontier.state.initial';
+  readonly basis: StateBasisToken;
+}
+
+export interface StateInitialMigrationResult {
+  readonly data: JsonValue | undefined;
+  readonly version?: string;
+  readonly changed?: boolean;
+  readonly report?: unknown;
+}
+
+export type StateInitialMigration = (
+  data: JsonValue | undefined,
+  context: StateInitialMigrationContext
+) => JsonValue | undefined | StateInitialMigrationResult;
+
+export interface StateMigrationOptions {
+  source?: string;
+  migrateInitial?: StateInitialMigration;
+  onReport?: (report: unknown, context: StateInitialMigrationContext) => void;
+}
+
 export interface StateEngineOptions {
   diff?: EngineOptions;
   basis?: StateBasisToken;
   registry?: StateRegistrySink | StateEngineRegistryOptions;
+  migration?: StateMigrationOptions;
 }
 
 export interface StateRegistrySink {

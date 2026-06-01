@@ -1,5 +1,5 @@
-export { createPatchRouter, createStateEngine, createStatePatchEnvelope } from './subscription.js';
-export { mapPath, mapTextPosition, mapTextPositions } from './path-map.js';
+export { createPatchRouter, createStateEngine, createStatePatchEnvelope } from './subscription.ts';
+export { mapPath, mapTextPosition, mapTextPositions } from './path-map.ts';
 
 export type {
   DeltaView,
@@ -37,4 +37,4 @@ export type {
   WatchOptions,
   WatchPath,
   WatchRange
-} from './types.js';
+} from './types.ts';

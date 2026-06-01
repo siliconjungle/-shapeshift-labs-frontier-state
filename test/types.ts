@@ -50,6 +50,24 @@ const registeredState: StateEngine = createStateEngine(initial, {
     tags: ['state']
   }
 });
+const migratedState: StateEngine = createStateEngine(initial, {
+  migration: {
+    source: 'idb:app-state',
+    migrateInitial(value, context) {
+      const basis: number = context.basis;
+      void basis;
+      return {
+        data: value,
+        version: '2',
+        changed: false,
+        report: { source: 'idb:app-state' }
+      };
+    },
+    onReport(report: unknown) {
+      void report;
+    }
+  }
+});
 
 const watched: PatchSubscription = state.watch('/rows/0/done', (patch) => {
   const received: Patch = patch;
@@ -101,3 +119,4 @@ void subpath;
 void position;
 void positions;
 void registeredState;
+void migratedState;

@@ -1,4 +1,4 @@
-import type { JsonArray, JsonObject, JsonValue, PathSegment } from './types.js';
+import type { JsonArray, JsonObject, JsonValue, PathSegment } from './types.ts';
 
 export function setOwnValue(object: JsonObject | JsonArray, key: PathSegment, value: JsonValue): void {
   if (key === '__proto__') {
