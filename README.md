@@ -225,6 +225,7 @@ state.commit({
 
 ```ts
 import {
+  createStateQueueCheckpoint,
   createPatchRouter,
   createStateEngine,
   createStatePatchEnvelope,
@@ -232,6 +233,7 @@ import {
   mapTextPosition,
   mapTextPositions,
   type Patch,
+  type StateQueueCheckpoint,
   type StateEngine,
   type TextPosition
 } from '@shapeshift-labs/frontier-state';
@@ -309,6 +311,37 @@ const stale = remote.commitPatchWithBasis(envelope, { onStale: 'route' });
 console.log(stale.status); // "routed"
 ```
 
+### Queue Checkpoints
+
+`createStateQueueCheckpoint()` builds a small structural snapshot for app dashboards, agent consoles, and realtime sync state. It normalizes queue work into `queued`, `running`, `review`, and `resolved` counts, reports active agents, computes per-lane pressure, and carries the last decision cursor from a decision stream.
+
+```ts
+const checkpoint = createStateQueueCheckpoint({
+  lanes: ['state', 'autonomous-merge'],
+  agents: [
+    { id: 'state-agent-1', lane: 'state' },
+    { id: 'coordinator-agent', lane: 'autonomous-merge' }
+  ],
+  items: [
+    { id: 'task-a', lane: 'state', status: 'queued' },
+    { id: 'task-b', lane: 'state', status: 'running', agentId: 'state-agent-1' },
+    {
+      id: 'routine-review',
+      lane: 'autonomous-merge',
+      status: 'coordinator-review',
+      agentId: 'coordinator-agent'
+    }
+  ],
+  decisions: [{ cursor: 'decision/41' }, { cursor: 'decision/42' }]
+});
+
+console.log(checkpoint.counts.reviewCount);
+console.log(checkpoint.lanePressure);
+console.log(checkpoint.lastDecisionCursor);
+```
+
+The shape is generic state data, not a runner contract: any queue, workflow, worker pool, or autonomous merge loop can publish it as a patchable state value. Routine coordinator review is represented as `review` pressure with an active agent, not as a human blocker. Continuous autonomous workers can therefore keep advancing, syncing, and checkpointing decisions while dashboards show where review capacity is being spent.
+
 ### Patch Router
 
 `createPatchRouter()` routes compact Frontier patches to exact, wildcard, row-field, and range watchers without making the core diff/apply package own subscriptions.
@@ -356,6 +389,7 @@ This package is intentionally limited to:
 - Patch routing and subscriptions.
 - Owned app-state commits.
 - Non-CRDT patch basis envelopes for stale-patch rejection or routing.
+- Structural queue checkpoints for dashboards and realtime sync state.
 - Maintained derived views.
 - JSON path and text-position mapping through Frontier patches.
 

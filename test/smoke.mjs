@@ -1,7 +1,10 @@
 import assert from 'node:assert';
 import {
+  FRONTIER_STATE_QUEUE_CHECKPOINT_KIND,
+  FRONTIER_STATE_QUEUE_CHECKPOINT_VERSION,
   createPatchRouter,
   createStateEngine,
+  createStateQueueCheckpoint,
   createStatePatchEnvelope,
   mapPath,
   mapTextPosition,
@@ -15,6 +18,7 @@ import {
 
 assert.strictEqual(typeof createPatchRouter, 'function');
 assert.strictEqual(typeof createStateEngine, 'function');
+assert.strictEqual(typeof createStateQueueCheckpoint, 'function');
 assert.strictEqual(typeof createStatePatchEnvelope, 'function');
 assert.strictEqual(typeof mapPath, 'function');
 assert.strictEqual(mapPathSubpath, mapPath);
@@ -60,6 +64,96 @@ const migratedState = createStateEngine(
 );
 assert.deepStrictEqual(migratedState.get(), { $version: '2', todos: [{ id: 'a', title: 'old' }] });
 assert.deepStrictEqual(migrationReport, { kind: 'frontier.migration.report', source: 'idb:app-state' });
+
+const queueCheckpoint = createStateQueueCheckpoint({
+  generatedAt: 9001,
+  lanes: ['state-queue-checkpoints', 'autonomous-merge'],
+  agents: [
+    { id: 'state-agent-1', lane: 'state-queue-checkpoints' },
+    { id: 'coordinator-agent', lane: 'autonomous-merge' },
+    { id: 'idle-doc-agent', lane: 'docs', active: false }
+  ],
+  items: [
+    { id: 'queued-state-task', lane: 'state-queue-checkpoints', status: 'queued' },
+    { id: 'running-state-task', lane: 'state-queue-checkpoints', status: 'running', agentId: 'state-agent-1' },
+    {
+      id: 'routine-coordinator-review',
+      lane: 'autonomous-merge',
+      status: 'coordinator-review',
+      agentId: 'coordinator-agent'
+    },
+    {
+      id: 'resolved-merge',
+      lane: 'autonomous-merge',
+      status: 'applied',
+      agentId: 'state-agent-2',
+      decisionCursor: 'decision/41'
+    }
+  ],
+  decisions: [{ cursor: 'decision/40' }, { cursor: 'decision/42' }]
+});
+assert.strictEqual(queueCheckpoint.kind, FRONTIER_STATE_QUEUE_CHECKPOINT_KIND);
+assert.strictEqual(queueCheckpoint.version, FRONTIER_STATE_QUEUE_CHECKPOINT_VERSION);
+assert.strictEqual(queueCheckpoint.generatedAt, 9001);
+assert.strictEqual(queueCheckpoint.lastDecisionCursor, 'decision/42');
+assert.deepStrictEqual(queueCheckpoint.counts, {
+  queuedCount: 1,
+  runningCount: 1,
+  reviewCount: 1,
+  resolvedCount: 1,
+  openCount: 3,
+  totalCount: 4
+});
+assert.deepStrictEqual(queueCheckpoint.activeAgents, [
+  {
+    id: 'state-agent-1',
+    lanes: ['state-queue-checkpoints'],
+    queuedCount: 0,
+    runningCount: 1,
+    reviewCount: 0,
+    resolvedCount: 0,
+    openCount: 1,
+    totalCount: 1,
+    assignedCount: 1
+  },
+  {
+    id: 'coordinator-agent',
+    lanes: ['autonomous-merge'],
+    queuedCount: 0,
+    runningCount: 0,
+    reviewCount: 1,
+    resolvedCount: 0,
+    openCount: 1,
+    totalCount: 1,
+    assignedCount: 1
+  }
+]);
+assert.deepStrictEqual(queueCheckpoint.lanePressure, [
+  {
+    lane: 'state-queue-checkpoints',
+    queuedCount: 1,
+    runningCount: 1,
+    reviewCount: 0,
+    resolvedCount: 0,
+    openCount: 2,
+    totalCount: 2,
+    activeAgentCount: 1,
+    waitingCount: 1,
+    pressure: 2
+  },
+  {
+    lane: 'autonomous-merge',
+    queuedCount: 0,
+    runningCount: 0,
+    reviewCount: 1,
+    resolvedCount: 1,
+    openCount: 1,
+    totalCount: 2,
+    activeAgentCount: 1,
+    waitingCount: 1,
+    pressure: 1
+  }
+]);
 
 const authored = createStateEngine({ todos: [{ id: 'a', done: false }], text: 'hello' }, { diff: { arrayKey: 'id' } });
 const envelope = authored.commitWithBasis(
